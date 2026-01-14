@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MealWeek" />
+    <title>MealWeek - Planificateur de Repas</title>
+    <link rel="stylesheet" href="main.css" />
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <script>
+      // Configuration Firebase
+      const firebaseConfig = {
+        apiKey: "AIzaSyCstBHS-bfpK7wqF9s5YkNsS50MCBrpMCo",
+        authDomain: "mealweek-be250.firebaseapp.com",
+        projectId: "mealweek-be250",
+        storageBucket: "mealweek-be250.firebasestorage.app",
+        messagingSenderId: "833141953610",
+        appId: "1:833141953610:web:1bd16dcd375aba6cbb82b3",
+        measurementId: "G-YH2K5NCKLB",
+        databaseURL:
+          "https://mealweek-be250-default-rtdb.europe-west1.firebasedatabase.app",
+      };
+
+      // Initialiser Firebase
+      firebase.initializeApp(firebaseConfig);
+      const database = firebase.database();
+    </script>
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <div class="header">
+        <h1>🍽️ MealWeek</h1>
+        <p>Planifiez vos repas simplement</p>
+      </div>
+
+      <!-- Week Navigation -->
+      <div class="week-nav">
+        <button id="prevWeek">← Préc.</button>
+        <div class="week-info" id="weekDisplay">Semaine du ...</div>
+        <button id="nextWeek">Suiv. →</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="planning">
+          <span class="tab-icon">📅</span>
+          <span class="tab-label">Planning</span>
+        </button>
+        <button class="tab" data-tab="recipes">
+          <span class="tab-icon">📖</span>
+          <span class="tab-label">Recettes</span>
+        </button>
+        <button class="tab" data-tab="shopping">
+          <span class="tab-icon">🛒</span>
+          <span class="tab-label">Courses</span>
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="content-card">
+        <!-- Planning Section -->
+        <div id="planning-section" class="section active">
+          <div id="days-container"></div>
+        </div>
+
+        <!-- Recipes Section -->
+        <div id="recipes-section" class="section">
+          <div class="recipe-form">
+            <div class="form-title">➕ Nouvelle recette</div>
+            <input
+              type="text"
+              id="recipeName"
+              class="form-input"
+              placeholder="Nom de la recette..."
+            />
+            <div id="ingredientsContainer"></div>
+            <button class="btn-add-ingredient" id="addIngredientBtn">
+              + Ajouter un ingrédient
+            </button>
+            <button class="btn-save-recipe" id="saveRecipeBtn">
+              Enregistrer la recette
+            </button>
+          </div>
+          <div id="recipes-list"></div>
+        </div>
+
+        <!-- Shopping Section -->
+        <div id="shopping-section" class="section">
+          <div id="shopping-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Configuration
+      const DAYS = [
+        "Lundi",
+        "Mardi",
+        "Mercredi",
+        "Jeudi",
+        "Vendredi",
+        "Samedi",
+        "Dimanche",
+      ];
+      const MEALS = { lunch: "🌞 Midi", dinner: "🌙 Soir" };
+
+      // État de l'application
+      let state = {
+        currentWeekOffset: 0,
+        meals: {},
+        recipes: [],
+        shoppingList: [],
+        activeTab: "planning",
+        tempIngredients: [""],
+      };
+
+      // Initialisation
+      document.addEventListener("DOMContentLoaded", init);
+
+      function init() {
+        loadData();
+        setupEventListeners();
+        render();
+      }
+
+      function setupEventListeners() {
+        // Navigation semaine
+        document.getElementById("prevWeek").addEventListener("click", () => {
+          state.currentWeekOffset--;
+          render();
+        });
+
+        document.getElementById("nextWeek").addEventListener("click", () => {
+          state.currentWeekOffset++;
+          render();
+        });
+
+        // Tabs
+        document.querySelectorAll(".tab").forEach((tab) => {
+          tab.addEventListener("click", () => {
+            document
+              .querySelectorAll(".tab")
+              .forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            state.activeTab = tab.dataset.tab;
+            showActiveTab();
+          });
+        });
+
+        // Recette
+        document
+          .getElementById("addIngredientBtn")
+          .addEventListener("click", addIngredientInput);
+        document
+          .getElementById("saveRecipeBtn")
+          .addEventListener("click", saveRecipe);
+      }
+
+      function showActiveTab() {
+        document.querySelectorAll(".section").forEach((section) => {
+          section.classList.remove("active");
+        });
+        document
+          .getElementById(`${state.activeTab}-section`)
+          .classList.add("active");
+
+        if (state.activeTab === "recipes") renderRecipes();
+        if (state.activeTab === "shopping") renderShoppingList();
+      }
+
+      function getWeekDates() {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + diff + state.currentWeekOffset * 7);
+
+        const dates = [];
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(monday);
+          date.setDate(monday.getDate() + i);
+          dates.push(date);
+        }
+        return dates;
+      }
+
+      function formatDate(date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+          2,
+          "0"
+        )}-${String(date.getDate()).padStart(2, "0")}`;
+      }
+
+      function isToday(date) {
+        const today = new Date();
+        return (
+          date.getDate() === today.getDate() &&
+          date.getMonth() === today.getMonth() &&
+          date.getFullYear() === today.getFullYear()
+        );
+      }
+
+      function render() {
+        renderWeekDisplay();
+        renderPlanning();
+      }
+
+      function renderWeekDisplay() {
+        const dates = getWeekDates();
+        const start = dates[0];
+        const end = dates[6];
+        const weekText = `${start.getDate()}/${
+          start.getMonth() + 1
+        } - ${end.getDate()}/${end.getMonth() + 1}`;
+        document.getElementById("weekDisplay").textContent = weekText;
+      }
+
+      function renderPlanning() {
+        const dates = getWeekDates();
+        const container = document.getElementById("days-container");
+        container.innerHTML = "";
+
+        dates.forEach((date, index) => {
+          const dateKey = formatDate(date);
+          if (!state.meals[dateKey]) {
+            state.meals[dateKey] = {
+              lunch: { recipeId: null, checked: false },
+              dinner: { recipeId: null, checked: false },
+            };
+          }
+
+          const dayCard = document.createElement("div");
+          dayCard.className = `day-card ${isToday(date) ? "today" : ""}`;
+
+          dayCard.innerHTML = `
+                    <div class="day-header">
+                        <span class="day-name">${DAYS[index]}</span>
+                        <span class="day-date">${date.getDate()}/${
+            date.getMonth() + 1
+          }</span>
+                    </div>
+                    ${renderMealSection(dateKey, "lunch")}
+                    ${renderMealSection(dateKey, "dinner")}
+                `;
+
+          container.appendChild(dayCard);
+        });
+
+        // Event listeners pour les selects et checkboxes
+        container.querySelectorAll(".meal-select").forEach((select) => {
+          select.addEventListener("change", handleMealChange);
+        });
+
+        container.querySelectorAll(".checkbox-meal").forEach((checkbox) => {
+          checkbox.addEventListener("click", handleMealCheck);
+        });
+      }
+
+      function renderMealSection(dateKey, mealType) {
+        const meal = state.meals[dateKey][mealType];
+        const selectedRecipe = meal.recipeId
+          ? state.recipes.find((r) => r.id === meal.recipeId)
+          : null;
+
+        return `
+                <div class="meal-section">
+                    <div class="meal-label">${MEALS[mealType]}</div>
+                    <div class="meal-selector">
+                        <select class="meal-select ${
+                          selectedRecipe ? "selected" : ""
+                        }" 
+                                data-date="${dateKey}" 
+                                data-meal="${mealType}">
+                            <option value="">Choisir une recette...</option>
+                            ${state.recipes
+                              .map(
+                                (recipe) => `
+                                <option value="${recipe.id}" ${
+                                  meal.recipeId === recipe.id ? "selected" : ""
+                                }>
+                                    ${recipe.name}
+                                </option>
+                            `
+                              )
+                              .join("")}
+                        </select>
+                        <div class="checkbox-meal ${
+                          meal.checked ? "checked" : ""
+                        }" 
+                             data-date="${dateKey}" 
+                             data-meal="${mealType}"></div>
+                    </div>
+                </div>
+            `;
+      }
+
+      function handleMealChange(e) {
+        const date = e.target.dataset.date;
+        const meal = e.target.dataset.meal;
+        const recipeId = e.target.value ? parseInt(e.target.value) : null;
+
+        state.meals[date][meal].recipeId = recipeId;
+
+        // Ajouter ingrédients à la liste de courses
+        if (recipeId) {
+          const recipe = state.recipes.find((r) => r.id === recipeId);
+          if (recipe) {
+            recipe.ingredients.forEach((ingredient) => {
+              if (
+                !state.shoppingList.find(
+                  (item) => item.text.toLowerCase() === ingredient.toLowerCase()
+                )
+              ) {
+                state.shoppingList.push({
+                  id: Date.now() + Math.random(),
+                  text: ingredient,
+                  checked: false,
+                });
+              }
+            });
+          }
+        }
+
+        saveData();
+        render();
+      }
+
+      function handleMealCheck(e) {
+        const date = e.currentTarget.dataset.date;
+        const meal = e.currentTarget.dataset.meal;
+        state.meals[date][meal].checked = !state.meals[date][meal].checked;
+        saveData();
+        render();
+      }
+
+      // Gestion des recettes
+      function addIngredientInput() {
+        state.tempIngredients.push("");
+        renderIngredientInputs();
+      }
+
+      function renderIngredientInputs() {
+        const container = document.getElementById("ingredientsContainer");
+        container.innerHTML = state.tempIngredients
+          .map(
+            (ingredient, index) => `
+                <div class="ingredient-input-group">
+                    <input type="text" 
+                           class="form-input ingredient-input" 
+                           placeholder="Ex: 200g de pâtes"
+                           value="${ingredient}"
+                           data-index="${index}">
+                    ${
+                      state.tempIngredients.length > 1
+                        ? `
+                        <button class="btn-remove-ingredient" data-index="${index}">×</button>
+                    `
+                        : ""
+                    }
+                </div>
+            `
+          )
+          .join("");
+
+        // Event listeners
+        container.querySelectorAll(".ingredient-input").forEach((input) => {
+          input.addEventListener("input", (e) => {
+            state.tempIngredients[e.target.dataset.index] = e.target.value;
+          });
+        });
+
+        container.querySelectorAll(".btn-remove-ingredient").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            const index = parseInt(e.target.dataset.index);
+            state.tempIngredients.splice(index, 1);
+            renderIngredientInputs();
+          });
+        });
+      }
+
+      function saveRecipe() {
+        const name = document.getElementById("recipeName").value.trim();
+        const ingredients = state.tempIngredients.filter(
+          (i) => i.trim() !== ""
+        );
+
+        if (!name || ingredients.length === 0) {
+          alert("Veuillez remplir le nom et au moins un ingrédient");
+          return;
+        }
+
+        state.recipes.push({
+          id: Date.now(),
+          name: name,
+          ingredients: ingredients,
+        });
+
+        // Reset form
+        document.getElementById("recipeName").value = "";
+        state.tempIngredients = [""];
+        renderIngredientInputs();
+
+        saveData();
+        renderRecipes();
+      }
+
+      function renderRecipes() {
+        renderIngredientInputs();
+        const container = document.getElementById("recipes-list");
+
+        if (state.recipes.length === 0) {
+          container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📖</div>
+                        <div class="empty-title">Aucune recette</div>
+                        <div class="empty-text">Créez votre première recette<br>avec ses ingrédients</div>
+                    </div>
+                `;
+          return;
+        }
+
+        container.innerHTML = state.recipes
+          .map(
+            (recipe) => `
+                <div class="recipe-card">
+                    <div class="recipe-header">
+                        <div class="recipe-name">${recipe.name}</div>
+                        <button class="btn-delete-recipe" onclick="deleteRecipe(${
+                          recipe.id
+                        })">Supprimer</button>
+                    </div>
+                    <div class="recipe-ingredients">
+                        ${recipe.ingredients
+                          .map(
+                            (ing) => `
+                            <span class="ingredient-tag">${ing}</span>
+                        `
+                          )
+                          .join("")}
+                    </div>
+                </div>
+            `
+          )
+          .join("");
+      }
+
+      function deleteRecipe(id) {
+        if (confirm("Supprimer cette recette ?")) {
+          state.recipes = state.recipes.filter((r) => r.id !== id);
+
+          // Retirer des plannings
+          Object.keys(state.meals).forEach((date) => {
+            if (state.meals[date].lunch.recipeId === id)
+              state.meals[date].lunch.recipeId = null;
+            if (state.meals[date].dinner.recipeId === id)
+              state.meals[date].dinner.recipeId = null;
+          });
+
+          saveData();
+          renderRecipes();
+          render();
+        }
+      }
+
+      // Liste de courses
+      function renderShoppingList() {
+        const container = document.getElementById("shopping-list");
+
+        if (state.shoppingList.length === 0) {
+          container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🛒</div>
+                        <div class="empty-title">Liste vide</div>
+                        <div class="empty-text">Ajoutez des recettes à votre planning<br>pour générer votre liste de courses</div>
+                    </div>
+                `;
+          return;
+        }
+
+        const unchecked = state.shoppingList.filter((item) => !item.checked);
+        const checked = state.shoppingList.filter((item) => item.checked);
+
+        container.innerHTML = `
+                ${[...unchecked, ...checked]
+                  .map(
+                    (item) => `
+                    <div class="shopping-item">
+                        <div class="shopping-checkbox ${
+                          item.checked ? "checked" : ""
+                        }" 
+                             onclick="toggleShoppingItem(${item.id})"></div>
+                        <div class="shopping-text ${
+                          item.checked ? "checked" : ""
+                        }">${item.text}</div>
+                    </div>
+                `
+                  )
+                  .join("")}
+                <button class="btn-clear-shopping" onclick="clearCheckedItems()">
+                    Supprimer les articles cochés
+                </button>
+            `;
+      }
+
+      function toggleShoppingItem(id) {
+        const item = state.shoppingList.find((i) => i.id === id);
+        if (item) {
+          item.checked = !item.checked;
+          saveData();
+          renderShoppingList();
+        }
+      }
+
+      function clearCheckedItems() {
+        if (confirm("Supprimer tous les articles cochés ?")) {
+          state.shoppingList = state.shoppingList.filter(
+            (item) => !item.checked
+          );
+          saveData();
+          renderShoppingList();
+        }
+      }
+
+      // Sauvegarde / Chargement avec Firebase
+      let isSyncing = false; // Éviter les boucles infinies
+
+      function saveData() {
+        // Sauvegarder en local (backup)
+        localStorage.setItem("mealweek_v2", JSON.stringify(state));
+
+        // Sauvegarder sur Firebase
+        if (!isSyncing) {
+          database
+            .ref("mealweek")
+            .set({
+              meals: state.meals,
+              recipes: state.recipes,
+              shoppingList: state.shoppingList,
+            })
+            .catch((error) => {
+              console.error("Erreur Firebase:", error);
+            });
+        }
+      }
+
+      function loadData() {
+        // D'abord charger depuis localStorage (rapide)
+        const saved = localStorage.getItem("mealweek_v2");
+        if (saved) {
+          const loaded = JSON.parse(saved);
+          state.meals = loaded.meals || {};
+          state.recipes = loaded.recipes || [];
+          state.shoppingList = loaded.shoppingList || [];
+        }
+
+        // Écouter les changements Firebase en temps réel
+        database.ref("mealweek").on(
+          "value",
+          (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+              isSyncing = true;
+              state.meals = data.meals || {};
+              state.recipes = data.recipes || [];
+              state.shoppingList = data.shoppingList || [];
+
+              // Sauvegarder en local aussi
+              localStorage.setItem("mealweek_v2", JSON.stringify(state));
+
+              // Re-render l'interface
+              render();
+              if (state.activeTab === "recipes") renderRecipes();
+              if (state.activeTab === "shopping") renderShoppingList();
+
+              isSyncing = false;
+            }
+          },
+          (error) => {
+            console.error("Erreur de lecture Firebase:", error);
+          }
+        );
+      }
+
+      // Initialiser les ingrédients
+      renderIngredientInputs();
+    </script>
+  </body>
+</html>
