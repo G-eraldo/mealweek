@@ -479,22 +479,49 @@ body {
   color: #94a3b8;
 }
 
+.shopping-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.btn-select-all,
 .btn-clear-shopping {
-  width: 100%;
-  padding: 14px;
-  background: white;
-  color: #f97316;
-  border: 2px solid #f97316;
-  border-radius: 15px;
-  font-size: 15px;
+  flex: 1;
+  padding: 16px 10px;
+  border-radius: 18px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  margin-top: 15px;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-select-all {
+  background: #f8fafc;
+  color: #475569;
+  border: 2px solid #e2e8f0;
+}
+
+.btn-select-all:active {
+  background: #f1f5f9;
+  transform: scale(0.96);
+  border-color: #cbd5e1;
+}
+
+.btn-clear-shopping {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 2px solid #ffe4e6;
 }
 
 .btn-clear-shopping:active {
-  transform: scale(0.98);
+  background: #ffe4e6;
+  transform: scale(0.96);
+  border-color: #fecdd3;
 }
 
 /* Empty State */

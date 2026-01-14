@@ -118,13 +118,13 @@
     <script>
       // Configuration
       const DAYS = [
+        "Vendredi",
+        "Samedi",
+        "Dimanche",
         "Lundi",
         "Mardi",
         "Mercredi",
         "Jeudi",
-        "Vendredi",
-        "Samedi",
-        "Dimanche",
       ];
       const MEALS = { lunch: "🌞 Midi", dinner: "🌙 Soir" };
 
@@ -528,9 +528,14 @@
                 `
                   )
                   .join("")}
-                <button class="btn-clear-shopping" onclick="clearCheckedItems()">
-                    Supprimer les articles cochés
-                </button>
+                <div class="shopping-buttons">
+                    <button class="btn-select-all" onclick="selectAllItems()">
+                        ✓ Tout sélectionner
+                    </button>
+                    <button class="btn-clear-shopping" onclick="clearCheckedItems()">
+                        Supprimer les cochés
+                    </button>
+                </div>
             `;
       }
 
@@ -551,6 +556,14 @@
           saveData();
           renderShoppingList();
         }
+      }
+
+      function selectAllItems() {
+        state.shoppingList.forEach((item) => {
+          item.checked = true;
+        });
+        saveData();
+        renderShoppingList();
       }
 
       // Sauvegarde / Chargement avec Firebase
