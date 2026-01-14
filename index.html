@@ -14,6 +14,7 @@
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <script>
@@ -33,6 +34,17 @@
       // Initialiser Firebase
       firebase.initializeApp(firebaseConfig);
       const database = firebase.database();
+      const auth = firebase.auth();
+
+      // Connexion anonyme automatique
+      auth
+        .signInAnonymously()
+        .then(() => {
+          console.log("Connecté anonymement à Firebase");
+        })
+        .catch((error) => {
+          console.error("Erreur d'authentification:", error);
+        });
     </script>
   </head>
   <body>
@@ -128,9 +140,16 @@
       document.addEventListener("DOMContentLoaded", init);
 
       function init() {
-        loadData();
         setupEventListeners();
         render();
+
+        // Attendre l'authentification avant de charger les données
+        auth.onAuthStateChanged((user) => {
+          if (user) {
+            console.log("Utilisateur authentifié, chargement des données...");
+            loadData();
+          }
+        });
       }
 
       function setupEventListeners() {
